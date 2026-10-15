@@ -1,0 +1,27 @@
+# Copy to ~/.config/voice-assistant/config.toml and uncomment what you need.
+# Every key is optional; these are the defaults.
+
+[audio]
+# device = "hw:0,0"        # ALSA capture device (see `voice devices`)
+# warmup_secs = 1.0        # discard the mic "pop" after waking from suspend
+# highpass_hz = 100.0      # remove DC offset and hum
+
+[vad]
+# speech_prob = 0.5
+# silence_prob = 0.35
+# end_silence_secs = 0.7   # pause length that ends a sentence
+# max_utterance_secs = 15.0
+# min_speech_secs = 0.3
+# pre_roll_secs = 0.3
+
+[whisper]
+# model = "base"           # tiny | base | small | medium | large-v3
+# language = "en"
+# beam_size = 5
+# device = "cpu"           # or "cuda"
+# compute_type = "int8"
+# model_dir = "~/.cache/whisper-models"
+
+[output]
+# transcript_dir = "~/Transcripts"
+# key_delay_secs = 0.004
