@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/).
+
+## [0.3.0] - 2026-10-15
+
+### Added
+- `voice daemon` background service (systemd user unit) that keeps Whisper
+  loaded, so the hotkey starts listening instantly; `voice start|stop|status|quit`.
+- Top-bar icon showing idle/listening state, with a start/stop menu.
+- Push-to-talk: hold a configurable key (`[hotkey] push_to_talk`) to dictate.
+- Voice commands: "new line", "new paragraph", "scratch that", "stop dictation".
+- Optional local LLM cleanup through Ollama (`[cleanup] enabled = true`).
+- Personal vocabulary (`[whisper] vocabulary = [...]`) and `language = "auto"`.
+- Release workflow, ruff linting in CI, contributor guide.
+
+### Changed
+- "Listening" is signalled only after the microphone warm-up, so the first
+  words are no longer discarded.
+
+## [0.2.0] - 2026-10-15
+
+### Changed
+- Restructured the single-file script into a tested, installable package with
+  Silero-VAD segmentation, a `voice` CLI, TOML config and an install script.

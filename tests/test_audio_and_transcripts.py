@@ -12,9 +12,9 @@ def test_highpass_removes_dc_and_keeps_speech_band():
     dc = np.full(sr, 0.3, np.float32)
     voice = (0.3 * np.sin(2 * np.pi * 1000 * t)).astype(np.float32)
     hp = HighPass(100, sr)
-    out = np.concatenate([hp(c) for c in np.split(dc + voice, 10)])   # chunked
-    assert abs(out[sr // 2:].mean()) < 0.01
-    assert 0.18 < out[sr // 2:].std() < 0.23
+    out = np.concatenate([hp(c) for c in np.split(dc + voice, 10)])  # chunked
+    assert abs(out[sr // 2 :].mean()) < 0.01
+    assert 0.18 < out[sr // 2 :].std() < 0.23
 
 
 def test_pcm16_to_float():

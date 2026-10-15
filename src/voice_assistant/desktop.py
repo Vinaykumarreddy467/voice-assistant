@@ -10,8 +10,7 @@ log = logging.getLogger(__name__)
 
 def notify(body: str, timeout_ms: int = 3000, title: str = "Voice Dictation") -> None:
     try:
-        subprocess.run(["notify-send", "-t", str(timeout_ms), title, body],
-                       timeout=5, check=False)
+        subprocess.run(["notify-send", "-t", str(timeout_ms), title, body], timeout=5, check=False)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         log.debug("notify-send unavailable")
 
@@ -38,8 +37,12 @@ def copy_to_clipboard(text: str) -> bool:
         return False
     for cmd in (["wl-copy"], ["xclip", "-selection", "clipboard"]):
         try:
-            if subprocess.run(cmd, input=text, text=True, capture_output=True,
-                              timeout=2).returncode == 0:
+            if (
+                subprocess.run(
+                    cmd, input=text, text=True, capture_output=True, timeout=2
+                ).returncode
+                == 0
+            ):
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue

@@ -16,7 +16,8 @@
 
 [whisper]
 # model = "base"           # tiny | base | small | medium | large-v3
-# language = "en"
+# language = "en"         # or "auto" to detect the language per sentence
+# vocabulary = ["LangGraph", "CrewAI", "MCP", "SurrealDB"]
 # beam_size = 5
 # device = "cpu"           # or "cuda"
 # compute_type = "int8"
@@ -25,3 +26,12 @@
 [output]
 # transcript_dir = "~/Transcripts"
 # key_delay_secs = 0.004
+
+[cleanup]
+# enabled = false          # polish text with a local Ollama model
+# model = "llama3.2:3b"
+# url = "http://localhost:11434"
+# timeout_secs = 20.0
+
+[hotkey]
+# push_to_talk = "KEY_RIGHTCTRL"   # hold to dictate (daemon only)

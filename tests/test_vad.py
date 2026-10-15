@@ -25,7 +25,7 @@ def silence(secs: float) -> np.ndarray:
 def feed_in_chunks(seg: Segmenter, audio: np.ndarray, chunk: int = 1600):
     out = []
     for i in range(0, len(audio), chunk):
-        out += seg.feed(audio[i:i + chunk])
+        out += seg.feed(audio[i : i + chunk])
     return out
 
 

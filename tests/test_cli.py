@@ -7,10 +7,13 @@ def test_default_command_is_listen():
     assert build_parser().parse_args([]).command == "listen"
 
 
-@pytest.mark.parametrize("argv", [
-    ["--model", "tiny", "type"],
-    ["type", "--model", "tiny"],
-])
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--model", "tiny", "type"],
+        ["type", "--model", "tiny"],
+    ],
+)
 def test_options_before_or_after_command(argv):
     args = build_parser().parse_args(argv)
     assert args.command == "type"

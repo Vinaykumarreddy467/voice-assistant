@@ -49,8 +49,19 @@ class HighPass:
 
 
 def _arecord_cmd(cfg: AudioConfig, extra: list[str] = ()) -> list[str]:
-    cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(cfg.sample_rate),
-           "-c", "1", "--file-type", "raw", *extra]
+    cmd = [
+        "arecord",
+        "-q",
+        "-f",
+        "S16_LE",
+        "-r",
+        str(cfg.sample_rate),
+        "-c",
+        "1",
+        "--file-type",
+        "raw",
+        *extra,
+    ]
     if cfg.device:
         cmd += ["-D", cfg.device]
     return cmd
@@ -71,8 +82,13 @@ class MicrophoneStream:
         self._running = False
         self._skip = int(cfg.warmup_secs * cfg.sample_rate) * BYTES_PER_SAMPLE
         self._filter = HighPass(cfg.highpass_hz, cfg.sample_rate)
+        self._ready = threading.Event()
 
-    def __enter__(self) -> "MicrophoneStream":
+    def wait_ready(self, timeout: float = 5.0) -> bool:
+        """Block until the warm-up audio has been discarded."""
+        return self._ready.wait(timeout)
+
+    def __enter__(self) -> MicrophoneStream:
         self.start()
         return self
 
@@ -86,8 +102,10 @@ class MicrophoneStream:
     def start(self) -> None:
         try:
             self._proc = subprocess.Popen(
-                _arecord_cmd(self.cfg), stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, bufsize=0,
+                _arecord_cmd(self.cfg),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                bufsize=0,
             )
         except FileNotFoundError as exc:
             raise AudioError("arecord not found (install alsa-utils)") from exc
@@ -107,9 +125,12 @@ class MicrophoneStream:
                 drop = min(self._skip, len(data))
                 self._skip -= drop
                 data = data[drop:]
+            if not self._skip:
+                self._ready.set()
             with self._lock:
                 self._buffer.extend(data)
         self._running = False
+        self._ready.set()
         log.debug("microphone reader stopped")
 
     def stop(self) -> None:
@@ -134,7 +155,8 @@ def record(cfg: AudioConfig, seconds: float) -> np.ndarray:
     """Blocking fixed-length recording (unfiltered), used by the mic test."""
     proc = subprocess.run(
         _arecord_cmd(cfg, ["-d", str(int(round(seconds)))]),
-        capture_output=True, timeout=seconds + 10,
+        capture_output=True,
+        timeout=seconds + 10,
     )
     return pcm16_to_float(proc.stdout)
 
@@ -145,8 +167,21 @@ def load_file(path: Path, sample_rate: int) -> np.ndarray:
         raise AudioError(f"file not found: {path}")
     try:
         proc = subprocess.run(
-            ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(path),
-             "-ar", str(sample_rate), "-ac", "1", "-f", "s16le", "-"],
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-i",
+                str(path),
+                "-ar",
+                str(sample_rate),
+                "-ac",
+                "1",
+                "-f",
+                "s16le",
+                "-",
+            ],
             capture_output=True,
         )
     except FileNotFoundError as exc:
@@ -165,8 +200,9 @@ class InputDevice:
 def list_input_devices() -> list[InputDevice]:
     """PipeWire audio sources (best effort; empty if pw-cli is unavailable)."""
     try:
-        out = subprocess.run(["pw-cli", "list-objects", "Node"],
-                             capture_output=True, text=True, timeout=5).stdout
+        out = subprocess.run(
+            ["pw-cli", "list-objects", "Node"], capture_output=True, text=True, timeout=5
+        ).stdout
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
     nodes: list[dict[str, str]] = []
@@ -178,15 +214,19 @@ def list_input_devices() -> list[InputDevice]:
             key, value = (p.strip() for p in s.split("=", 1))
             nodes[-1][key] = value.strip('"')
     return [
-        InputDevice(n.get("node.nick") or n.get("node.description") or n.get("node.name", "?"),
-                    n.get("node.name", "?"))
-        for n in nodes if n.get("media.class") == "Audio/Source"
+        InputDevice(
+            n.get("node.nick") or n.get("node.description") or n.get("node.name", "?"),
+            n.get("node.name", "?"),
+        )
+        for n in nodes
+        if n.get("media.class") == "Audio/Source"
     ]
 
 
 def alsa_capture_hardware() -> str:
     try:
-        return subprocess.run(["arecord", "-l"], capture_output=True,
-                              text=True, timeout=3).stdout.strip()
+        return subprocess.run(
+            ["arecord", "-l"], capture_output=True, text=True, timeout=3
+        ).stdout.strip()
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return ""

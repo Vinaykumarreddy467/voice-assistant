@@ -60,7 +60,9 @@ def _start(child_args: list[str], log_file: Path) -> int:
     with open(log_file, "wb") as out:
         proc = subprocess.Popen(
             [sys.executable, "-m", "voice_assistant", *child_args, "type"],
-            stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=subprocess.STDOUT,
             start_new_session=True,
         )
     desktop.notify("⏳ Loading… (press the shortcut again to stop)", 2000)

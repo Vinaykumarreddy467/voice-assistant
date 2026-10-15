@@ -21,6 +21,7 @@ log = logging.getLogger("voice_assistant")
 
 # ── commands ───────────────────────────────────────────────────────────────
 
+
 def _finish(config: Config, text: str, notify: bool = False) -> None:
     """Print, copy and save the final transcript."""
     if not text:
@@ -36,13 +37,15 @@ def _finish(config: Config, text: str, notify: bool = False) -> None:
 
 
 def _session(config: Config, stop: threading.Event):
+    from voice_assistant.cleanup import OllamaCleaner
     from voice_assistant.session import DictationSession
 
+    cleaner = OllamaCleaner(config.cleanup).clean if config.cleanup.enabled else None
     transcriber = Transcriber(config.whisper, config.audio.sample_rate)
     print(f"  Loading model '{config.whisper.model}'…", end=" ", flush=True)
     transcriber.load()
     print("✅", flush=True)
-    return DictationSession(config, transcriber, stop)
+    return DictationSession(config, transcriber, stop, cleaner)
 
 
 def cmd_listen(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
@@ -98,7 +101,7 @@ def cmd_test_mic(config: Config, args: argparse.Namespace, stop: threading.Event
         print("  ❌ No audio captured — check the device with `voice devices`.")
         return 1
     half = len(samples) // 2
-    rms = lambda x: float(np.sqrt(np.mean(x ** 2)))  # noqa: E731
+    rms = lambda x: float(np.sqrt(np.mean(x**2)))  # noqa: E731
     quiet, talk, peak = rms(samples[:half]), rms(samples[half:]), float(np.abs(samples).max())
     print(f"  Background RMS {quiet:.4f}   Speech RMS {talk:.4f}   Peak {peak:.3f}")
     if peak >= 0.99:
@@ -124,9 +127,35 @@ def cmd_devices(config: Config, args: argparse.Namespace, stop: threading.Event)
     return 0
 
 
+def cmd_daemon(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
+    from voice_assistant.daemon import Daemon
+
+    Daemon(config).serve()
+    return 0
+
+
+def cmd_control(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
+    from voice_assistant import daemon
+
+    reply = daemon.send(args.command)
+    if reply is None:
+        print(
+            "voice daemon is not running (start it: systemctl --user start voice-assistant)",
+            file=sys.stderr,
+        )
+        return 1
+    print(reply)
+    return 0
+
+
 def cmd_toggle(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
+    from voice_assistant import daemon
     from voice_assistant.toggle import toggle
 
+    reply = daemon.send("toggle")  # instant path: model already loaded
+    if reply is not None:
+        print(reply)
+        return 0
     child = []
     for flag in ("model", "device", "config"):
         value = getattr(args, flag, None)
@@ -143,34 +172,41 @@ COMMANDS = {
     "file": (cmd_file, "transcribe an audio or video file"),
     "test-mic": (cmd_test_mic, "check microphone levels"),
     "devices": (cmd_devices, "list microphones"),
-    "toggle": (cmd_toggle, "start/stop background typing (bind to a hotkey)"),
+    "toggle": (cmd_toggle, "start/stop typing via the daemon, or a one-off process"),
+    "daemon": (cmd_daemon, "background service: model kept loaded, top-bar icon"),
+    "start": (cmd_control, "tell the daemon to start listening"),
+    "stop": (cmd_control, "tell the daemon to stop and save"),
+    "status": (cmd_control, "show whether the daemon is listening"),
+    "quit": (cmd_control, "shut the daemon down"),
 }
 GRACEFUL_STOP = {"listen", "type", "once"}
 
 
 # ── argument parsing ───────────────────────────────────────────────────────
 
+
 def _common_options(parser: argparse.ArgumentParser, suppress: bool) -> None:
     default = argparse.SUPPRESS if suppress else None
-    parser.add_argument("--model", choices=MODELS, default=default,
-                        help="Whisper model (default: base)")
-    parser.add_argument("--device", default=default,
-                        help="ALSA capture device, e.g. hw:0,0")
-    parser.add_argument("--config", type=Path, default=default,
-                        help="path to config.toml")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        default=argparse.SUPPRESS if suppress else False)
+    parser.add_argument(
+        "--model", choices=MODELS, default=default, help="Whisper model (default: base)"
+    )
+    parser.add_argument("--device", default=default, help="ALSA capture device, e.g. hw:0,0")
+    parser.add_argument("--config", type=Path, default=default, help="path to config.toml")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", default=argparse.SUPPRESS if suppress else False
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="voice", description="Offline real-time dictation powered by Whisper.")
+        prog="voice", description="Offline real-time dictation powered by Whisper."
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     _common_options(parser, suppress=False)
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     for name, (_, help_text) in COMMANDS.items():
         p = sub.add_parser(name, help=help_text, description=help_text)
-        _common_options(p, suppress=True)   # allow options after the command too
+        _common_options(p, suppress=True)  # allow options after the command too
         if name == "file":
             p.add_argument("path", help="audio/video file to transcribe")
     parser.set_defaults(command="listen")
@@ -189,8 +225,10 @@ def _apply_overrides(config: Config, args: argparse.Namespace) -> Config:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
-                        format="%(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
     try:
         config = _apply_overrides(load_config(args.config), args)
     except ConfigError as exc:

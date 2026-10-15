@@ -6,24 +6,58 @@ the ``input`` group. Keys are mapped for the US layout.
 
 from __future__ import annotations
 
+import contextlib
 import time
 import unicodedata
 
 _SHIFTED = {
-    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7",
-    "*": "8", "(": "9", ")": "0", "_": "MINUS", "+": "EQUAL",
-    "{": "LEFTBRACE", "}": "RIGHTBRACE", "|": "BACKSLASH", ":": "SEMICOLON",
-    '"': "APOSTROPHE", "<": "COMMA", ">": "DOT", "?": "SLASH", "~": "GRAVE",
+    "!": "1",
+    "@": "2",
+    "#": "3",
+    "$": "4",
+    "%": "5",
+    "^": "6",
+    "&": "7",
+    "*": "8",
+    "(": "9",
+    ")": "0",
+    "_": "MINUS",
+    "+": "EQUAL",
+    "{": "LEFTBRACE",
+    "}": "RIGHTBRACE",
+    "|": "BACKSLASH",
+    ":": "SEMICOLON",
+    '"': "APOSTROPHE",
+    "<": "COMMA",
+    ">": "DOT",
+    "?": "SLASH",
+    "~": "GRAVE",
 }
 _PLAIN = {
-    " ": "SPACE", "-": "MINUS", "=": "EQUAL", "[": "LEFTBRACE",
-    "]": "RIGHTBRACE", "\\": "BACKSLASH", ";": "SEMICOLON",
-    "'": "APOSTROPHE", ",": "COMMA", ".": "DOT", "/": "SLASH", "`": "GRAVE",
-    "\n": "ENTER", "\t": "TAB",
+    " ": "SPACE",
+    "-": "MINUS",
+    "=": "EQUAL",
+    "[": "LEFTBRACE",
+    "]": "RIGHTBRACE",
+    "\\": "BACKSLASH",
+    ";": "SEMICOLON",
+    "'": "APOSTROPHE",
+    ",": "COMMA",
+    ".": "DOT",
+    "/": "SLASH",
+    "`": "GRAVE",
+    "\n": "ENTER",
+    "\t": "TAB",
 }
 _ASCII_FIXUPS = {
-    "‘": "'", "’": "'", "“": '"', "”": '"',
-    "–": "-", "—": " - ", "…": "...", " ": " ",
+    "‘": "'",
+    "’": "'",
+    "“": '"',
+    "”": '"',
+    "–": "-",
+    "—": " - ",
+    "…": "...",
+    " ": " ",
 }
 
 
@@ -55,7 +89,7 @@ class VirtualKeyboard:
         self._e = ecodes
         self._ui = UInput(name="Voice Assistant Keyboard", phys="voice-assistant")
         self._delay = key_delay
-        time.sleep(settle_secs)   # let the compositor pick up the new device
+        time.sleep(settle_secs)  # let the compositor pick up the new device
 
     def type(self, text: str) -> None:
         e, ui = self._e, self._ui
@@ -75,8 +109,16 @@ class VirtualKeyboard:
             ui.syn()
             time.sleep(self._delay)
 
+    def backspace(self, count: int) -> None:
+        e, ui = self._e, self._ui
+        for _ in range(count):
+            ui.write(e.EV_KEY, e.KEY_BACKSPACE, 1)
+            ui.syn()
+            time.sleep(self._delay)
+            ui.write(e.EV_KEY, e.KEY_BACKSPACE, 0)
+            ui.syn()
+            time.sleep(self._delay)
+
     def close(self) -> None:
-        try:
+        with contextlib.suppress(OSError):
             self._ui.close()
-        except OSError:
-            pass

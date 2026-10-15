@@ -6,14 +6,14 @@ returns every utterance (speech followed by a pause) completed so far.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 
 from voice_assistant.config import VadConfig
 
-FRAME = 512             # samples per Silero frame (32 ms at 16 kHz)
-CONTEXT_FRAMES = 16     # history re-fed with each call so the model is warmed up
+FRAME = 512  # samples per Silero frame (32 ms at 16 kHz)
+CONTEXT_FRAMES = 16  # history re-fed with each call so the model is warmed up
 
 VadModel = Callable[[np.ndarray], np.ndarray]
 
@@ -30,7 +30,7 @@ class Segmenter:
         self.sample_rate = sample_rate
         self.model = model or default_vad_model()
         self.frame_secs = FRAME / sample_rate
-        self._pending = np.zeros(0, np.float32)            # not yet classified
+        self._pending = np.zeros(0, np.float32)  # not yet classified
         self._history = np.zeros(CONTEXT_FRAMES * FRAME, np.float32)
         self._pre_roll = np.zeros(0, np.float32)
         self._pre_roll_len = int(cfg.pre_roll_secs * sample_rate)
@@ -50,14 +50,14 @@ class Segmenter:
     def _probabilities(self, frames: np.ndarray) -> np.ndarray:
         audio = np.concatenate([self._history, frames])
         probs = np.asarray(self.model(audio)).reshape(-1)
-        self._history = audio[-len(self._history):]
-        return probs[-(len(frames) // FRAME):]
+        self._history = audio[-len(self._history) :]
+        return probs[-(len(frames) // FRAME) :]
 
     def _finish(self, out: list[np.ndarray]) -> None:
         audio = np.concatenate(self._frames)
         tail = self._silence_frames * FRAME - int(0.2 * self.sample_rate)
         if tail > 0:
-            audio = audio[:-tail]          # keep ~0.2 s of trailing silence
+            audio = audio[:-tail]  # keep ~0.2 s of trailing silence
         if self._speech_frames * self.frame_secs >= self.cfg.min_speech_secs:
             out.append(audio)
         self._reset()
@@ -71,14 +71,14 @@ class Segmenter:
         frames, self._pending = self._pending[:n], self._pending[n:]
 
         for i, p in enumerate(self._probabilities(frames)):
-            frame = frames[i * FRAME:(i + 1) * FRAME]
+            frame = frames[i * FRAME : (i + 1) * FRAME]
             if not self._speaking:
                 if p >= self.cfg.speech_prob:
                     self._speaking = True
                     self._frames = [self._pre_roll, frame]
                     self._speech_frames = 1
                 else:
-                    self._pre_roll = np.concatenate([self._pre_roll, frame])[-self._pre_roll_len:]
+                    self._pre_roll = np.concatenate([self._pre_roll, frame])[-self._pre_roll_len :]
                 continue
 
             self._frames.append(frame)
@@ -87,10 +87,12 @@ class Segmenter:
             else:
                 self._speech_frames += 1
                 self._silence_frames = 0
-            if (self._silence_frames * self.frame_secs >= self.cfg.end_silence_secs
-                    or len(self._frames) >= self._max_frames):
+            if (
+                self._silence_frames * self.frame_secs >= self.cfg.end_silence_secs
+                or len(self._frames) >= self._max_frames
+            ):
                 self._finish(done)
-                self._pre_roll = frame[-self._pre_roll_len:]
+                self._pre_roll = frame[-self._pre_roll_len :]
         return done
 
     def flush(self) -> list[np.ndarray]:

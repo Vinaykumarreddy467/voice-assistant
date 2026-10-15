@@ -21,7 +21,7 @@ def save_transcript(text: str, directory: Path, now: float | None = None) -> Pat
         return None
     directory.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(now))
-    name = f"{stamp}_{slugify(text)}"[:MAX_NAME - 4] + ".txt"
+    name = f"{stamp}_{slugify(text)}"[: MAX_NAME - 4] + ".txt"
     path = directory / name
     path.write_text(text + "\n")
     return path

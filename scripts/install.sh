@@ -64,4 +64,15 @@ setup_gnome_shortcut() {
 }
 (( WITH_SHORTCUT )) && setup_gnome_shortcut
 
-info "Done. Try:  voice test-mic   then   voice"
+if command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
+    info "Enabling background daemon (systemd user service)"
+    mkdir -p "$HOME/.config/systemd/user"
+    cp "$ROOT/packaging/voice-assistant.service" "$HOME/.config/systemd/user/"
+    systemctl --user daemon-reload
+    systemctl --user enable voice-assistant.service >/dev/null 2>&1
+    systemctl --user restart voice-assistant.service
+else
+    warn "systemd user session not available; run 'voice daemon' yourself for the instant hotkey"
+fi
+
+info "Done. Press the hotkey, or try:  voice test-mic   then   voice"

@@ -4,7 +4,8 @@ well-known hallucinations on noise and silence."""
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from typing import Protocol
 
 import numpy as np
 
@@ -15,10 +16,22 @@ log = logging.getLogger(__name__)
 MODELS = ("tiny", "base", "small", "medium", "large-v3")
 
 # Phrases Whisper tends to "hear" in noise; dropped when they are the whole output.
-HALLUCINATIONS = frozenset({
-    "you", "so", ".", "...", "okay.", "bye.", "bye!", "thank you", "thank you.",
-    "thanks for watching!", "thanks for watching.", "thank you for watching.",
-})
+HALLUCINATIONS = frozenset(
+    {
+        "you",
+        "so",
+        ".",
+        "...",
+        "okay.",
+        "bye.",
+        "bye!",
+        "thank you",
+        "thank you.",
+        "thanks for watching!",
+        "thanks for watching.",
+        "thank you for watching.",
+    }
+)
 
 MIN_AUDIO_SECS = 0.3
 PROMPT_CHARS = 200
@@ -32,9 +45,11 @@ class Segment(Protocol):
 
 
 def is_probably_noise(seg: Segment) -> bool:
-    return (seg.no_speech_prob > 0.6
-            or (seg.no_speech_prob > 0.3 and seg.avg_logprob < -0.5)
-            or seg.compression_ratio > 2.4)        # looping / repeated output
+    return (
+        seg.no_speech_prob > 0.6
+        or (seg.no_speech_prob > 0.3 and seg.avg_logprob < -0.5)
+        or seg.compression_ratio > 2.4
+    )  # looping / repeated output
 
 
 def clean_segments(segments: Iterable[Segment]) -> str:
@@ -49,6 +64,13 @@ def clean_segments(segments: Iterable[Segment]) -> str:
         parts.append(text)
     joined = " ".join(parts)
     return "" if joined.lower() in HALLUCINATIONS else joined
+
+
+def build_prompt(vocabulary: Iterable[str], context: str) -> str | None:
+    """Whisper's initial prompt: custom vocabulary first, then recent text."""
+    vocab = ", ".join(vocabulary)
+    prompt = (f"Glossary: {vocab}. " if vocab else "") + context[-PROMPT_CHARS:]
+    return prompt.strip() or None
 
 
 class Transcriber:
@@ -78,9 +100,9 @@ class Transcriber:
         segments, _ = self._model.transcribe(
             audio,
             beam_size=self.cfg.beam_size,
-            language=self.cfg.language,
+            language=None if self.cfg.language == "auto" else self.cfg.language,
             vad_filter=vad_filter,
             condition_on_previous_text=False,
-            initial_prompt=prompt[-PROMPT_CHARS:] or None,
+            initial_prompt=build_prompt(self.cfg.vocabulary, prompt),
         )
         return clean_segments(segments)

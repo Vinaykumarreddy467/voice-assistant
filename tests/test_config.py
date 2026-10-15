@@ -18,7 +18,7 @@ def test_overrides_are_merged(tmp_path):
     assert cfg.output.transcript_dir == Path.home() / "notes"
 
 
-@pytest.mark.parametrize("body", ['[whisper]\nmodle = "x"\n', '[nope]\na = 1\n', "not toml ["])
+@pytest.mark.parametrize("body", ['[whisper]\nmodle = "x"\n', "[nope]\na = 1\n", "not toml ["])
 def test_bad_config_is_rejected(tmp_path, body):
     path = tmp_path / "config.toml"
     path.write_text(body)

@@ -12,11 +12,18 @@ class Seg:
 
 
 def test_joins_confident_segments():
-    assert clean_segments([Seg(" Hello there."), Seg(" How are you?")]) == "Hello there. How are you?"
+    assert (
+        clean_segments([Seg(" Hello there."), Seg(" How are you?")]) == "Hello there. How are you?"
+    )
 
 
 def test_drops_low_confidence_noise():
-    assert clean_segments([Seg("How do you handle this stuff?", no_speech_prob=0.41, avg_logprob=-0.66)]) == ""
+    assert (
+        clean_segments(
+            [Seg("How do you handle this stuff?", no_speech_prob=0.41, avg_logprob=-0.66)]
+        )
+        == ""
+    )
     assert clean_segments([Seg("Anything", no_speech_prob=0.9)]) == ""
 
 
@@ -25,9 +32,15 @@ def test_drops_looping_output():
 
 
 def test_drops_consecutive_repeats():
-    assert clean_segments([Seg("Okay, let's go."), Seg("Okay, let's go."), Seg("Done.")]) == "Okay, let's go. Done."
+    assert (
+        clean_segments([Seg("Okay, let's go."), Seg("Okay, let's go."), Seg("Done.")])
+        == "Okay, let's go. Done."
+    )
 
 
 def test_drops_stock_hallucination():
     assert clean_segments([Seg("Thank you.")]) == ""
-    assert clean_segments([Seg("Thank you."), Seg("See you tomorrow.")]) == "Thank you. See you tomorrow."
+    assert (
+        clean_segments([Seg("Thank you."), Seg("See you tomorrow.")])
+        == "Thank you. See you tomorrow."
+    )
