@@ -26,6 +26,7 @@
 [output]
 # transcript_dir = "~/Transcripts"
 # key_delay_secs = 0.004
+# keyboard = "auto"        # "uinput" (US layout, input group) or "portal" (any layout)
 
 [cleanup]
 # enabled = false          # polish text with a local Ollama model

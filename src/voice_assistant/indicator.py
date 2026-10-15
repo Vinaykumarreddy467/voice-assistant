@@ -70,8 +70,13 @@ def run_with_indicator(daemon: Daemon) -> None:
     daemon.on_change(lambda listening: GLib.idle_add(refresh, listening))
 
     loop = GLib.MainLoop()
+
+    def on_signal() -> bool:
+        daemon.quit_event.set()
+        return True
+
     for sig in (signal.SIGINT, signal.SIGTERM):
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, lambda: daemon.quit_event.set() or True)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, on_signal)
 
     def watch_quit() -> bool:
         if daemon.quit_event.is_set():

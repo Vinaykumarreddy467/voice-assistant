@@ -52,7 +52,7 @@ class Daemon:
         self.config = config
         self.transcriber = Transcriber(config.whisper, config.audio.sample_rate)
         self.cleaner = OllamaCleaner(config.cleanup).clean if config.cleanup.enabled else None
-        self.sink = typing_sink(config.output.key_delay_secs)
+        self.sink = typing_sink(config.output.key_delay_secs, config.output.keyboard)
         self.quit_event = threading.Event()
         self._lock = threading.Lock()
         self._stop: threading.Event | None = None

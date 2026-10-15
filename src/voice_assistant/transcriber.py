@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -77,7 +77,7 @@ class Transcriber:
     def __init__(self, cfg: WhisperConfig, sample_rate: int = 16000):
         self.cfg = cfg
         self.sample_rate = sample_rate
-        self._model = None
+        self._model: Any = None
 
     def load(self) -> None:
         if self._model is not None:

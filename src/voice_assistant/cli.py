@@ -53,7 +53,11 @@ def cmd_listen(config: Config, args: argparse.Namespace, stop: threading.Event) 
 
     typing = args.command == "type"
     session = _session(config, stop)
-    sink = sinks.typing_sink(config.output.key_delay_secs) if typing else sinks.TerminalSink()
+    sink = (
+        sinks.typing_sink(config.output.key_delay_secs, config.output.keyboard)
+        if typing
+        else sinks.TerminalSink()
+    )
 
     def ready() -> None:
         if typing:
@@ -148,6 +152,14 @@ def cmd_control(config: Config, args: argparse.Namespace, stop: threading.Event)
     return 0
 
 
+def cmd_setup(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
+    from voice_assistant import setup
+
+    for line in setup.run(args.shortcut, hotkey=not args.no_shortcut, remove=args.remove):
+        print(f"  • {line}")
+    return 0
+
+
 def cmd_toggle(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
     from voice_assistant import daemon
     from voice_assistant.toggle import toggle
@@ -157,7 +169,7 @@ def cmd_toggle(config: Config, args: argparse.Namespace, stop: threading.Event) 
         print(reply)
         return 0
     child = []
-    for flag in ("model", "device", "config"):
+    for flag in ("model", "device", "language", "config"):
         value = getattr(args, flag, None)
         if value:
             child += [f"--{flag}", str(value)]
@@ -178,6 +190,7 @@ COMMANDS = {
     "stop": (cmd_control, "tell the daemon to stop and save"),
     "status": (cmd_control, "show whether the daemon is listening"),
     "quit": (cmd_control, "shut the daemon down"),
+    "setup": (cmd_setup, "install the hotkey and background service for this desktop"),
 }
 GRACEFUL_STOP = {"listen", "type", "once"}
 
@@ -191,6 +204,9 @@ def _common_options(parser: argparse.ArgumentParser, suppress: bool) -> None:
         "--model", choices=MODELS, default=default, help="Whisper model (default: base)"
     )
     parser.add_argument("--device", default=default, help="ALSA capture device, e.g. hw:0,0")
+    parser.add_argument(
+        "--language", default=default, help='spoken language code, e.g. "en", "hi", "te", or "auto"'
+    )
     parser.add_argument("--config", type=Path, default=default, help="path to config.toml")
     parser.add_argument(
         "-v", "--verbose", action="store_true", default=argparse.SUPPRESS if suppress else False
@@ -209,6 +225,14 @@ def build_parser() -> argparse.ArgumentParser:
         _common_options(p, suppress=True)  # allow options after the command too
         if name == "file":
             p.add_argument("path", help="audio/video file to transcribe")
+        if name == "setup":
+            p.add_argument(
+                "--shortcut",
+                default="<Shift><Super>v",
+                help="hotkey in GNOME notation (default: <Shift><Super>v)",
+            )
+            p.add_argument("--no-shortcut", action="store_true", help="only the service")
+            p.add_argument("--remove", action="store_true", help="undo voice setup")
     parser.set_defaults(command="listen")
     return parser
 
@@ -220,6 +244,8 @@ def _apply_overrides(config: Config, args: argparse.Namespace) -> Config:
         config = replace(config, whisper=replace(config.whisper, model=args.model))
     if args.device:
         config = replace(config, audio=replace(config.audio, device=args.device))
+    if getattr(args, "language", None):
+        config = replace(config, whisper=replace(config.whisper, language=args.language))
     return config
 
 

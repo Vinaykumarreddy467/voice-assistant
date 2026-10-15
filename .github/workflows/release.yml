@@ -21,3 +21,21 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  # PyPI "trusted publishing": no token needed once the project on pypi.org
+  # trusts this repo + workflow. Enable by setting the repository variable
+  # PUBLISH_TO_PYPI=true (Settings → Secrets and variables → Actions → Variables).
+  pypi:
+    needs: build
+    if: vars.PUBLISH_TO_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1

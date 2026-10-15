@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-10-16
+
+### Added
+- Typing through the XDG RemoteDesktop portal: no `input` group needed and
+  any keyboard layout works (`[output] keyboard = "auto" | "uinput" | "portal"`).
+  The one-time permission is remembered via a restore token.
+- `voice setup [--remove]` installs the hotkey (GNOME, and KDE Plasma via
+  kglobalaccel) and the systemd user service — works for pipx installs too.
+- `--language` option (e.g. `hi`, `te`, `auto`).
+- mypy type checking in CI; PyPI trusted-publishing job in the release workflow.
+
+### Changed
+- Distribution renamed to `whisper-dictate` on PyPI (`voice-assistant` was
+  taken). The `voice` command and import package are unchanged.
+
 ## [0.3.0] - 2026-10-15
 
 ### Added

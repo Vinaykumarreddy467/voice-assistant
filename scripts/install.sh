@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install voice-assistant for the current user (no root needed).
 #
-#   scripts/install.sh                 # venv + `voice` command + GNOME hotkey
+#   scripts/install.sh                 # venv + `voice` command + hotkey + service
 #   scripts/install.sh --no-shortcut   # skip the hotkey
 #
 # Environment: PYTHON (default /usr/bin/python3), SHORTCUT (default Super+Shift+V)
@@ -39,40 +39,15 @@ printf '#!/bin/sh\nexec "%s" toggle "$@"\n' "$BIN/voice" > "$BIN/voice-toggle"
 chmod +x "$BIN/voice-toggle"
 
 if ! id -nG | grep -qw input; then
-    warn "typing into apps needs /dev/uinput access: sudo usermod -aG input $USER (then log out/in)"
+    info "Not in the 'input' group: typing will use the desktop's RemoteDesktop portal"
+    info "(GNOME asks once for permission). Push-to-talk needs the group."
 fi
 
-setup_gnome_shortcut() {
-    command -v dconf >/dev/null || { warn "dconf not found; set the hotkey manually"; return; }
-    local base=/org/gnome/settings-daemon/plugins/media-keys
-    local list path="" p i=0
-    list="$(dconf read "$base/custom-keybindings")"
-    for p in $(grep -o "'[^']*'" <<<"$list" | tr -d "'"); do
-        if [[ "$(dconf read "${p}command")" == *voice* ]]; then path="$p"; break; fi
-    done
-    if [[ -z "$path" ]]; then
-        while grep -q "custom$i/" <<<"$list"; do i=$((i + 1)); done
-        path="$base/custom-keybindings/custom$i/"
-        if [[ -z "$list" || "$list" == "@as []" ]]; then list="['$path']"
-        else list="${list%]}, '$path']"; fi
-        dconf write "$base/custom-keybindings" "$list"
-    fi
-    dconf write "${path}name" "'Voice Dictation'"
-    dconf write "${path}command" "'$BIN/voice toggle'"
-    dconf write "${path}binding" "'$SHORTCUT'"
-    info "Hotkey $SHORTCUT → voice toggle"
-}
-(( WITH_SHORTCUT )) && setup_gnome_shortcut
-
-if command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
-    info "Enabling background daemon (systemd user service)"
-    mkdir -p "$HOME/.config/systemd/user"
-    cp "$ROOT/packaging/voice-assistant.service" "$HOME/.config/systemd/user/"
-    systemctl --user daemon-reload
-    systemctl --user enable voice-assistant.service >/dev/null 2>&1
-    systemctl --user restart voice-assistant.service
+info "Setting up hotkey and background service"
+if (( WITH_SHORTCUT )); then
+    "$BIN/voice" setup --shortcut "$SHORTCUT"
 else
-    warn "systemd user session not available; run 'voice daemon' yourself for the instant hotkey"
+    "$BIN/voice" setup --no-shortcut
 fi
 
 info "Done. Press the hotkey, or try:  voice test-mic   then   voice"

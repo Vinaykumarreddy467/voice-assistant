@@ -1,3 +1,3 @@
 """Offline real-time dictation for the Linux desktop, powered by Whisper."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

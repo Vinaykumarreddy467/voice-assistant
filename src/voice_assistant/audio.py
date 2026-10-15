@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,7 +49,7 @@ class HighPass:
         return y
 
 
-def _arecord_cmd(cfg: AudioConfig, extra: list[str] = ()) -> list[str]:
+def _arecord_cmd(cfg: AudioConfig, extra: Sequence[str] = ()) -> list[str]:
     cmd = [
         "arecord",
         "-q",

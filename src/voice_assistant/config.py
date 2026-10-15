@@ -59,6 +59,8 @@ class WhisperConfig:
 class OutputConfig:
     transcript_dir: Path = field(default_factory=lambda: Path.home() / "Transcripts")
     key_delay_secs: float = 0.004  # per key press/release on the virtual keyboard
+    # "auto": uinput if permitted, else the RemoteDesktop portal; or "uinput" / "portal"
+    keyboard: str = "auto"
 
 
 @dataclass(frozen=True)

@@ -59,13 +59,13 @@ class PushToTalk:
 
         sel = selectors.DefaultSelector()
         for dev in keyboards:
-            sel.register(dev, selectors.EVENT_READ)
+            sel.register(dev, selectors.EVENT_READ, data=dev)
         while True:
             for key, _ in sel.select():
                 try:
-                    events = list(key.fileobj.read())
+                    events = list(key.data.read())
                 except OSError:  # keyboard unplugged
-                    sel.unregister(key.fileobj)
+                    sel.unregister(key.data)
                     continue
                 for ev in events:
                     if ev.type != ecodes.EV_KEY or ev.code != self.code:

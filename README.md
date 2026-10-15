@@ -8,7 +8,8 @@ the CPU. Nothing leaves your machine.
 - **Sentence-by-sentence**: the Silero VAD detects pauses, so each sentence is
   transcribed whole (no words cut at chunk boundaries, no audio dropped).
 - **Works on Wayland and X11**: text is typed through a virtual keyboard
-  (`/dev/uinput`), not the clipboard.
+  (`/dev/uinput`), or — with no special permissions and on any keyboard
+  layout — through the desktop's RemoteDesktop portal.
 - **Instant hotkey**: a background service keeps Whisper loaded; press
   <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> to start, again to stop. The
   session is saved to `~/Transcripts`. A top-bar icon shows when it's listening.
@@ -24,10 +25,23 @@ the CPU. Nothing leaves your machine.
 
 - Linux with ALSA/PipeWire, Python ≥ 3.11
 - `sudo apt install alsa-utils ffmpeg libnotify-bin`
-- For typing into apps: your user in the `input` group
-  (`sudo usermod -aG input $USER`, then log out and in)
+- Optional: your user in the `input` group (`sudo usermod -aG input $USER`,
+  then log out and in) for the fastest typing backend and push-to-talk.
+  Without it, typing goes through the RemoteDesktop portal (GNOME asks once).
 
 ## Install
+
+With [pipx](https://pipx.pypa.io) (once published on PyPI):
+
+```bash
+pipx install --system-site-packages whisper-dictate
+voice setup          # hotkey + background service for GNOME or KDE
+```
+
+`--system-site-packages` lets it use your distro's PyGObject for the top-bar
+icon, clipboard and portal typing.
+
+From source:
 
 ```bash
 git clone https://github.com/Vinaykumarreddy467/voice-assistant.git ~/.voice-assistant
@@ -53,9 +67,26 @@ This creates `.venv/`, installs the package in editable mode, puts `voice` and
 | `voice toggle` | Start/stop dictation via the daemon (what the hotkey runs) |
 | `voice daemon` | Background service (installed as `voice-assistant.service`) |
 | `voice start` / `stop` / `status` / `quit` | Control the running daemon |
+| `voice setup [--remove]` | Install (or remove) the hotkey and background service |
 
 Common options: `--model {tiny,base,small,medium,large-v3}`, `--device hw:0,0`,
-`--config PATH`, `-v`.
+`--language en|hi|te|ta|…|auto`, `--config PATH`, `-v`.
+
+### Languages
+
+Whisper understands ~100 languages. Set `language` to a code (`hi`, `te`,
+`ta`, `kn`, `bn`, `es`, …) or `"auto"`. Non-English accuracy improves a lot
+with `--model small` or larger. Typing non-ASCII text needs the portal
+backend (`[output] keyboard = "portal"`) and a keyboard layout that contains
+those characters.
+
+### Typing backends
+
+| `[output] keyboard` | How | Needs |
+|---|---|---|
+| `auto` (default) | uinput if allowed, else portal | — |
+| `uinput` | Virtual keyboard device; US layout | `input` group |
+| `portal` | RemoteDesktop portal keysyms; any layout | GNOME/KDE on Wayland, one-time permission |
 
 On an 8-thread laptop CPU, `base` transcribes a 5-second sentence in about a
 second; `small` is more accurate but ~3× slower.
@@ -97,6 +128,8 @@ src/voice_assistant/
 ├── transcriber.py  faster-whisper wrapper + hallucination filtering
 ├── sinks.py        output targets: terminal, virtual keyboard, clipboard fallback
 ├── keyboard.py     uinput virtual keyboard (US layout)
+├── portal.py       RemoteDesktop-portal keyboard (any layout, no permissions)
+├── setup.py        `voice setup`: hotkey (GNOME/KDE) + systemd user service
 ├── desktop.py      notifications and clipboard
 ├── transcripts.py  saving sessions to ~/Transcripts
 ├── commands.py     spoken commands ("new line", "scratch that", …)
@@ -127,7 +160,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). In short:
 | Text goes to the clipboard instead of being typed | Not in the `input` group (see Requirements) |
 | Hotkey does nothing | `voice status`; logs: `journalctl --user -u voice-assistant -n 50` |
 | No top-bar icon | Enable the "AppIndicator and KStatusNotifierItem Support" GNOME extension |
-| Characters wrong | The virtual keyboard assumes a US layout |
+| Characters wrong | uinput assumes a US layout — set `[output] keyboard = "portal"` |
+| GNOME shows a "remote control" icon | Expected with the portal backend while the daemon runs |
 
 ## License
 
