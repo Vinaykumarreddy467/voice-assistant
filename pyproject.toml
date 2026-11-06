@@ -60,5 +60,5 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-module = ["faster_whisper.*", "evdev.*", "gi.*", "ctranslate2.*"]
+module = ["faster_whisper.*", "evdev.*", "gi.*", "ctranslate2.*", "onnx_asr.*"]
 ignore_missing_imports = true
