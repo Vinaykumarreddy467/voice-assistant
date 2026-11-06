@@ -56,7 +56,9 @@ class OllamaCleaner:
         except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
             log.warning("cleanup skipped (%s)", exc)
             return text
-        cleaned = reply.strip().strip('"').strip()
+        # Never let the model add line breaks: typed into a terminal, a newline
+        # is Enter and would run whatever is on the command line.
+        cleaned = " ".join(reply.split()).strip('"').strip()
         if not _plausible(text, cleaned):
             log.debug("cleanup rejected: %r -> %r", text, cleaned)
             return text

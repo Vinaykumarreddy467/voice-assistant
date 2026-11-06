@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import tempfile
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -78,6 +79,10 @@ class MicrophoneStream:
     def __init__(self, cfg: AudioConfig):
         self.cfg = cfg
         self._proc: subprocess.Popen | None = None
+        self._thread: threading.Thread | None = None
+        # A file, not a pipe: it can never fill up and block arecord; kept open
+        # for the stream's lifetime so error() can read it after the process exits.
+        self._stderr = tempfile.TemporaryFile()  # noqa: SIM115
         self._buffer = bytearray()
         self._lock = threading.Lock()
         self._running = False
@@ -105,17 +110,26 @@ class MicrophoneStream:
             self._proc = subprocess.Popen(
                 _arecord_cmd(self.cfg),
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=self._stderr,
                 bufsize=0,
             )
         except FileNotFoundError as exc:
             raise AudioError("arecord not found (install alsa-utils)") from exc
         self._running = True
-        threading.Thread(target=self._reader, name="mic-reader", daemon=True).start()
+        self._thread = threading.Thread(target=self._reader, name="mic-reader", daemon=True)
+        self._thread.start()
+
+    def error(self) -> str:
+        """Last line arecord printed to stderr (why the stream ended)."""
+        self._stderr.seek(0)
+        lines = self._stderr.read().decode(errors="replace").strip().splitlines()
+        return lines[-1] if lines else ""
 
     def _reader(self) -> None:
         assert self._proc and self._proc.stdout
-        while self._running:
+        # Read until EOF (not until stop()): audio still in the pipe when the
+        # user stops is the end of their last sentence.
+        while True:
             try:
                 data = self._proc.stdout.read(4096)
             except (OSError, ValueError):
@@ -135,13 +149,16 @@ class MicrophoneStream:
         log.debug("microphone reader stopped")
 
     def stop(self) -> None:
-        self._running = False
+        """Stop capturing; returns once all captured audio is in the buffer."""
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
             try:
                 self._proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
+        if self._thread and self._thread is not threading.current_thread():
+            self._thread.join(timeout=2)
+        self._running = False
 
     def read(self) -> np.ndarray:
         """Return (filtered) audio captured since the previous call."""

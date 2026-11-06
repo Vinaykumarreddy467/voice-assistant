@@ -29,7 +29,7 @@ def test_whole_utterance_commands(spoken, action):
 
 def test_inline_line_breaks():
     assert parse("Dear team, new line. Thanks").text == "Dear team\nThanks"
-    assert parse("Intro. New paragraph. Body.").text == "Intro\n\nBody."
+    assert parse("Intro. New paragraph. Body.").text == "Intro.\n\nBody."
 
 
 # ── vocabulary prompt ──

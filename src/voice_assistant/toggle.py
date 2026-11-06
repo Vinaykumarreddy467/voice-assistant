@@ -10,6 +10,7 @@ import fcntl
 import logging
 import os
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -24,7 +25,21 @@ _MARKER = "voice_assistant"
 
 
 def runtime_dir() -> Path:
-    return Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/voice-assistant-{os.getuid()}")
+    """Private per-user directory for the socket, pid file and log.
+
+    Normally $XDG_RUNTIME_DIR. The /tmp fallback is created 0700 and must be
+    owned by us, otherwise another local user could pre-create it and
+    intercept the control socket.
+    """
+    xdg = os.environ.get("XDG_RUNTIME_DIR")
+    if xdg:
+        return Path(xdg)
+    path = Path(f"/tmp/voice-assistant-{os.getuid()}")
+    path.mkdir(mode=0o700, exist_ok=True)
+    st = path.lstat()
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise RuntimeError(f"{path} is not a private directory owned by you; refusing to use it")
+    return path
 
 
 def _paths() -> tuple[Path, Path, Path]:

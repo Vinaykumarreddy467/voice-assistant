@@ -19,7 +19,7 @@ from voice_assistant import commands
 from voice_assistant.audio import AudioError, MicrophoneStream
 from voice_assistant.config import Config
 from voice_assistant.sinks import Sink
-from voice_assistant.transcriber import Transcriber
+from voice_assistant.transcriber import SpeechToText
 from voice_assistant.vad import Segmenter
 
 log = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class DictationSession:
     def __init__(
         self,
         config: Config,
-        transcriber: Transcriber,
+        transcriber: SpeechToText,
         stop: threading.Event,
         cleaner: Cleaner | None = None,
         stream_factory: Callable[[], MicrophoneStream] | None = None,
@@ -58,7 +58,8 @@ class DictationSession:
             while not self.stop.is_set():
                 time.sleep(POLL_SECS)
                 if not stream.alive:
-                    raise AudioError("microphone stream ended unexpectedly")
+                    reason = stream.error() or "is the microphone in use or unplugged?"
+                    raise AudioError(f"microphone stream ended: {reason}")
                 self._handle(segmenter.feed(stream.read()), sink)
             # Finish whatever was being said when stop was requested.
             stream.stop()

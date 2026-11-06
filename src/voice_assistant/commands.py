@@ -25,7 +25,12 @@ _WHOLE = {
     "stop dictation": Action.STOP,
     "stop listening": Action.STOP,
 }
-_INLINE = re.compile(r"[,.]?\s*\bnew (line|paragraph)\b[.,!?]?\s*", re.IGNORECASE)
+# "new line" only counts as a command when it stands alone between pauses —
+# start of the utterance or after punctuation, and followed by punctuation or
+# the end — so "a new line of products" stays prose.
+_INLINE = re.compile(
+    r"(?:^|(?<=[.,!?;:]))\s*new (line|paragraph)\s*(?:[.,!?;:]+\s*|$)", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,8 @@ def parse(text: str) -> Parsed:
     if action:
         return Parsed("", action)
     text = _INLINE.sub(lambda m: "\n" if m.group(1).lower() == "line" else "\n\n", text)
+    # The command's own punctuation is gone; drop the comma it leaves before it.
+    text = re.sub(r"[,;:]\s*(?=\n)", "", text)
     return Parsed(text)
 
 

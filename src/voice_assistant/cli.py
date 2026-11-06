@@ -13,7 +13,7 @@ import numpy as np
 
 from voice_assistant import __version__, audio, desktop
 from voice_assistant.config import Config, ConfigError, load_config
-from voice_assistant.transcriber import MODELS, Transcriber
+from voice_assistant.transcriber import ENGINES, MODELS, make_transcriber
 from voice_assistant.transcripts import save_transcript
 
 log = logging.getLogger("voice_assistant")
@@ -41,8 +41,8 @@ def _session(config: Config, stop: threading.Event):
     from voice_assistant.session import DictationSession
 
     cleaner = OllamaCleaner(config.cleanup).clean if config.cleanup.enabled else None
-    transcriber = Transcriber(config.whisper, config.audio.sample_rate)
-    print(f"  Loading model '{config.whisper.model}'…", end=" ", flush=True)
+    transcriber = make_transcriber(config)
+    print(f"  Loading {transcriber.name}…", end=" ", flush=True)
     transcriber.load()
     print("✅", flush=True)
     return DictationSession(config, transcriber, stop, cleaner)
@@ -88,13 +88,27 @@ def cmd_once(config: Config, args: argparse.Namespace, stop: threading.Event) ->
 
 def cmd_file(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
     samples = audio.load_file(Path(args.path), config.audio.sample_rate)
-    transcriber = Transcriber(config.whisper, config.audio.sample_rate)
-    print(f"  Transcribing {args.path} with '{config.whisper.model}'…", flush=True)
+    transcriber = make_transcriber(config)
+    print(f"  Transcribing {args.path} with {transcriber.name}…", flush=True)
     text = transcriber.transcribe(samples, vad_filter=True)
     if not text:
         print("  No speech found.")
         return 1
     _finish(config, text)
+    return 0
+
+
+def cmd_bench(config: Config, args: argparse.Namespace, stop: threading.Event) -> int:
+    from voice_assistant import bench
+
+    transcriber = make_transcriber(config)
+    print(f"  Benchmarking {transcriber.name} on {args.dir}…", flush=True)
+    r = bench.run(transcriber, Path(args.dir), config.audio.sample_rate, args.verbose)
+    print(
+        f"  {transcriber.name}: WER {100 * r.wer:.2f}% ({r.errors}/{r.words} words wrong) | "
+        f"{r.rtf:.3f}× real time ({r.compute_secs:.1f} s for {r.audio_secs:.0f} s audio) | "
+        f"load {r.load_secs:.1f} s | peak RAM {r.peak_mb:.0f} MB"
+    )
     return 0
 
 
@@ -169,7 +183,7 @@ def cmd_toggle(config: Config, args: argparse.Namespace, stop: threading.Event) 
         print(reply)
         return 0
     child = []
-    for flag in ("model", "device", "language", "config"):
+    for flag in ("engine", "model", "device", "language", "config"):
         value = getattr(args, flag, None)
         if value:
             child += [f"--{flag}", str(value)]
@@ -182,6 +196,7 @@ COMMANDS = {
     "type": (cmd_listen, "live dictation typed into the focused window"),
     "once": (cmd_once, "record one utterance, then transcribe it"),
     "file": (cmd_file, "transcribe an audio or video file"),
+    "bench": (cmd_bench, "measure accuracy (WER) and speed on reference recordings"),
     "test-mic": (cmd_test_mic, "check microphone levels"),
     "devices": (cmd_devices, "list microphones"),
     "toggle": (cmd_toggle, "start/stop typing via the daemon, or a one-off process"),
@@ -200,6 +215,9 @@ GRACEFUL_STOP = {"listen", "type", "once"}
 
 def _common_options(parser: argparse.ArgumentParser, suppress: bool) -> None:
     default = argparse.SUPPRESS if suppress else None
+    parser.add_argument(
+        "--engine", choices=ENGINES, default=default, help="speech engine (default: config)"
+    )
     parser.add_argument(
         "--model", choices=MODELS, default=default, help="Whisper model (default: base)"
     )
@@ -225,6 +243,8 @@ def build_parser() -> argparse.ArgumentParser:
         _common_options(p, suppress=True)  # allow options after the command too
         if name == "file":
             p.add_argument("path", help="audio/video file to transcribe")
+        if name == "bench":
+            p.add_argument("dir", help="folder with audio + refs.json (or <name>.txt per file)")
         if name == "setup":
             p.add_argument(
                 "--shortcut",
@@ -240,13 +260,17 @@ def build_parser() -> argparse.ArgumentParser:
 def _apply_overrides(config: Config, args: argparse.Namespace) -> Config:
     from dataclasses import replace
 
+    from voice_assistant.config import validate
+
+    if getattr(args, "engine", None):
+        config = replace(config, asr=replace(config.asr, engine=args.engine))
     if args.model:
         config = replace(config, whisper=replace(config.whisper, model=args.model))
     if args.device:
         config = replace(config, audio=replace(config.audio, device=args.device))
     if getattr(args, "language", None):
         config = replace(config, whisper=replace(config.whisper, language=args.language))
-    return config
+    return validate(config)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -268,9 +292,14 @@ def main(argv: list[str] | None = None) -> int:
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, lambda *_: stop.set())
 
+    from voice_assistant.daemon import DaemonTimeout
+
     handler, _ = COMMANDS[args.command]
     try:
         return handler(config, args, stop)
+    except DaemonTimeout as exc:
+        print(f"voice: {exc}", file=sys.stderr)
+        return 1
     except audio.AudioError as exc:
         print(f"voice: {exc}", file=sys.stderr)
         return 1

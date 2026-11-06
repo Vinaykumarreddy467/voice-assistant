@@ -14,6 +14,11 @@
 # min_speech_secs = 0.3
 # pre_roll_secs = 0.3
 
+[asr]
+# engine = "parakeet"      # default; "whisper" for languages other than English
+# parakeet_model = "nemo-parakeet-tdt-0.6b-v2"
+# quantization = "int8"    # "int8" (small, fast) or "none" (full precision)
+
 [whisper]
 # model = "base"           # tiny | base | small | medium | large-v3
 # language = "en"         # or "auto" to detect the language per sentence

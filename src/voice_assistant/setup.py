@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,13 +21,13 @@ GNOME_BASE = "/org/gnome/settings-daemon/plugins/media-keys"
 
 SERVICE_TEMPLATE = """\
 [Unit]
-Description=Voice dictation daemon (Whisper kept loaded for instant hotkey)
+Description=Voice dictation daemon (speech model kept loaded for instant hotkey)
 Documentation=https://github.com/Vinaykumarreddy467/voice-assistant
 PartOf=graphical-session.target
 After=graphical-session.target pipewire.service
 
 [Service]
-ExecStart={voice} daemon
+ExecStart={exec_voice} daemon
 Restart=on-failure
 RestartSec=3
 
@@ -35,12 +36,40 @@ WantedBy=graphical-session.target
 """
 
 
+SHORTCUT_NAME = "Voice Dictation"
+
+
 def voice_executable() -> str:
-    """Absolute path of the `voice` command (stable across pipx/venv installs)."""
+    """Absolute path of the `voice` command that is running this setup.
+
+    Prefers the invoked script over ``which voice``, which could find a
+    different install (or an unrelated program) earlier on $PATH.
+    """
+    argv0 = Path(sys.argv[0])
+    if argv0.name == "voice" and argv0.exists():
+        return str(argv0.absolute())
+    beside = Path(sys.executable).with_name("voice")
+    if beside.exists():
+        return str(beside)
     found = shutil.which("voice")
-    if found:
-        return str(Path(found).absolute())
-    return str(Path(sys.executable).with_name("voice"))
+    return str(Path(found).absolute()) if found else str(beside)
+
+
+def gvariant_str(value: str) -> str:
+    """Quote a string as a GVariant text literal for `dconf write`."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def desktop_exec(voice: str) -> str:
+    """Exec= line for a .desktop file (freedesktop quoting rules)."""
+    escaped = "".join("\\" + c if c in '"`$\\' else c for c in voice).replace("%", "%%")
+    return f'"{escaped}" toggle'
+
+
+def systemd_quote(value: str) -> str:
+    """Quote one ExecStart argument (spaces, quotes, and % specifiers)."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
+    return f'"{escaped}"'
 
 
 def _run(*cmd: str) -> subprocess.CompletedProcess[str]:
@@ -67,9 +96,20 @@ def _dconf_format(paths: list[str]) -> str:
     return "[" + ", ".join(f"'{p}'" for p in paths) + "]" if paths else "@as []"
 
 
+_OUR_COMMAND = re.compile(r"(^|/)(voice toggle|voice-toggle)$")
+
+
+def _is_ours(path: str) -> bool:
+    """Only shortcuts this tool created — never another app's 'voice' shortcut."""
+    name = _run("dconf", "read", f"{path}name").stdout.strip()
+    command = _run("dconf", "read", f"{path}command").stdout.strip().strip("'\"")
+    command = command.replace("'", "").replace('"', "")
+    return name == gvariant_str(SHORTCUT_NAME) and bool(_OUR_COMMAND.search(command))
+
+
 def gnome_shortcut(command: str, binding: str, remove: bool = False) -> str:
     paths = _dconf_list(_run("dconf", "read", f"{GNOME_BASE}/custom-keybindings").stdout)
-    ours = [p for p in paths if "voice" in _run("dconf", "read", f"{p}command").stdout]
+    ours = [p for p in paths if _is_ours(p)]
     if remove:
         for p in ours:
             _run("dconf", "reset", "-f", p)
@@ -88,9 +128,9 @@ def gnome_shortcut(command: str, binding: str, remove: bool = False) -> str:
             i += 1
         path = f"{GNOME_BASE}/custom-keybindings/custom{i}/"
         _run("dconf", "write", f"{GNOME_BASE}/custom-keybindings", _dconf_format(paths + [path]))
-    _run("dconf", "write", f"{path}name", "'Voice Dictation'")
-    _run("dconf", "write", f"{path}command", f"'{command}'")
-    _run("dconf", "write", f"{path}binding", f"'{binding}'")
+    _run("dconf", "write", f"{path}name", gvariant_str(SHORTCUT_NAME))
+    _run("dconf", "write", f"{path}command", gvariant_str(command))
+    _run("dconf", "write", f"{path}binding", gvariant_str(binding))
     return f"GNOME hotkey {binding} → {command}"
 
 
@@ -171,7 +211,7 @@ def systemd_service(voice: str, remove: bool = False) -> str:
         _run("systemctl", "--user", "daemon-reload")
         return "background service removed"
     unit.parent.mkdir(parents=True, exist_ok=True)
-    unit.write_text(SERVICE_TEMPLATE.format(voice=voice))
+    unit.write_text(SERVICE_TEMPLATE.format(exec_voice=systemd_quote(voice)))
     _run("systemctl", "--user", "daemon-reload")
     _run("systemctl", "--user", "enable", SERVICE_NAME)
     result = _run("systemctl", "--user", "restart", SERVICE_NAME)
@@ -182,14 +222,14 @@ def systemd_service(voice: str, remove: bool = False) -> str:
 
 def run(binding: str = "<Shift><Super>v", hotkey: bool = True, remove: bool = False) -> list[str]:
     voice = voice_executable()
-    command = f"{voice} toggle"
+    command = f"{shlex.quote(voice)} toggle"  # GNOME/KDE split commands shell-style
     report = [systemd_service(voice, remove)]
     if hotkey:
         de = desktop_environment()
         if de == "gnome" and shutil.which("dconf"):
             report.append(gnome_shortcut(command, binding, remove))
         elif de == "kde":
-            report.append(kde_shortcut(command, binding, remove))
+            report.append(kde_shortcut(desktop_exec(voice), binding, remove))
         elif not remove:
             report.append(f"unsupported desktop '{de}': bind a key to run '{command}'")
     return report

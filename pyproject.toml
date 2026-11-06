@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whisper-dictate"
-version = "0.4.0"
+version = "0.5.0"
 description = "Offline real-time dictation for the Linux desktop, powered by Whisper"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,7 @@ dependencies = [
     "faster-whisper>=1.1",
     "numpy>=1.26",
     "evdev>=1.7",
+    "onnx-asr>=0.12",
 ]
 
 [project.optional-dependencies]

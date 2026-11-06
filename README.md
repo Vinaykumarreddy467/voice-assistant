@@ -2,8 +2,18 @@
 
 Offline, real-time dictation for the Linux desktop. Speak, and your words are
 typed into whatever window has focus — editor, browser, terminal, chat — using
-[faster-whisper](https://github.com/SYSTRAN/faster-whisper) running locally on
-the CPU. Nothing leaves your machine.
+NVIDIA's [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (English)
+or [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (99 languages)
+running locally on the CPU. Nothing leaves your machine.
+
+| Engine | Word error rate | Speed (× real time) | RAM |
+|---|---|---|---|
+| **Parakeet TDT 0.6B v2** (default) | **2.9%** | **0.36** | 1.5 GB |
+| Whisper small.en | 5.8% | 1.23 | 1.0 GB |
+| Whisper base | 10.3% | 0.43 | 0.5 GB |
+
+<sub>LibriSpeech sample (73 clips, 1,150 words) on an Intel i5-8365U laptop
+CPU. Reproduce with `voice bench`.</sub>
 
 - **Sentence-by-sentence**: the Silero VAD detects pauses, so each sentence is
   transcribed whole (no words cut at chunk boundaries, no audio dropped).
@@ -51,8 +61,8 @@ scripts/install.sh
 
 This creates `.venv/`, installs the package in editable mode, puts `voice` and
 `voice-toggle` in `~/.local/bin` and registers the GNOME hotkey
-(`--no-shortcut` to skip). The first run downloads the Whisper model
-(~150 MB for `base`) to `~/.cache/whisper-models`.
+(`--no-shortcut` to skip). The first run downloads the Parakeet model
+(~650 MB) to `~/.cache/huggingface`.
 
 ## Usage
 
@@ -63,13 +73,15 @@ This creates `.venv/`, installs the package in editable mode, puts `voice` and
 | `voice once` | Record one sentence, transcribe, copy to clipboard |
 | `voice file talk.mp3` | Transcribe an audio/video file |
 | `voice test-mic` | Check background noise, speech level and clipping |
+| `voice bench DIR` | Word error rate, speed and memory on your own reference recordings |
 | `voice devices` | List microphones |
 | `voice toggle` | Start/stop dictation via the daemon (what the hotkey runs) |
 | `voice daemon` | Background service (installed as `voice-assistant.service`) |
 | `voice start` / `stop` / `status` / `quit` | Control the running daemon |
 | `voice setup [--remove]` | Install (or remove) the hotkey and background service |
 
-Common options: `--model {tiny,base,small,medium,large-v3}`, `--device hw:0,0`,
+Common options: `--engine {whisper,parakeet}`, `--model {base,small.en,large-v3-turbo,…}`,
+`--device hw:0,0`,
 `--language en|hi|te|ta|…|auto`, `--config PATH`, `-v`.
 
 ### Languages
@@ -88,8 +100,9 @@ those characters.
 | `uinput` | Virtual keyboard device; US layout | `input` group |
 | `portal` | RemoteDesktop portal keysyms; any layout | GNOME/KDE on Wayland, one-time permission |
 
-On an 8-thread laptop CPU, `base` transcribes a 5-second sentence in about a
-second; `small` is more accurate but ~3× slower.
+Use `--engine whisper` (or `[asr] engine = "whisper"`) for languages other
+than English; `--model small` or `large-v3-turbo` are much better than
+`base` for non-English speech, at a cost in speed.
 
 ## Configuration
 
@@ -125,7 +138,8 @@ src/voice_assistant/
 ├── session.py      pipeline: mic → segmenter → transcriber → sink
 ├── audio.py        arecord capture thread, high-pass filter, ffmpeg decoding
 ├── vad.py          Silero-VAD utterance segmenter (streaming, chunk-size independent)
-├── transcriber.py  faster-whisper wrapper + hallucination filtering
+├── transcriber.py  speech engines: faster-whisper (+ hallucination filter), Parakeet
+├── bench.py        `voice bench`: WER / speed / memory measurement
 ├── sinks.py        output targets: terminal, virtual keyboard, clipboard fallback
 ├── keyboard.py     uinput virtual keyboard (US layout)
 ├── portal.py       RemoteDesktop-portal keyboard (any layout, no permissions)

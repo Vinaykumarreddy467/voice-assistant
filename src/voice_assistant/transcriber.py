@@ -1,5 +1,11 @@
-"""Speech-to-text with faster-whisper, plus filtering of Whisper's
-well-known hallucinations on noise and silence."""
+"""Speech-to-text engines behind one small interface.
+
+- :class:`WhisperTranscriber` — faster-whisper; multilingual, supports a
+  vocabulary prompt; output is filtered for Whisper's typical hallucinations.
+- :class:`ParakeetTranscriber` — NVIDIA Parakeet TDT via onnx-asr; English
+  only, more accurate and faster than Whisper models of similar cost, with
+  punctuation and capitalisation built in.
+"""
 
 from __future__ import annotations
 
@@ -9,11 +15,25 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from voice_assistant.config import WhisperConfig
+from voice_assistant.config import AsrConfig, Config, VadConfig, WhisperConfig
 
 log = logging.getLogger(__name__)
 
-MODELS = ("tiny", "base", "small", "medium", "large-v3")
+ENGINES = ("whisper", "parakeet")
+MODELS = (
+    "tiny",
+    "tiny.en",
+    "base",
+    "base.en",
+    "small",
+    "small.en",
+    "medium",
+    "medium.en",
+    "large-v3",
+    "large-v3-turbo",
+    "distil-small.en",
+    "distil-large-v3.5",
+)
 
 # Phrases Whisper tends to "hear" in noise; dropped when they are the whole output.
 HALLUCINATIONS = frozenset(
@@ -73,10 +93,18 @@ def build_prompt(vocabulary: Iterable[str], context: str) -> str | None:
     return prompt.strip() or None
 
 
-class Transcriber:
+class SpeechToText(Protocol):
+    name: str
+
+    def load(self) -> None: ...
+    def transcribe(self, audio: np.ndarray, prompt: str = "", vad_filter: bool = False) -> str: ...
+
+
+class WhisperTranscriber:
     def __init__(self, cfg: WhisperConfig, sample_rate: int = 16000):
         self.cfg = cfg
         self.sample_rate = sample_rate
+        self.name = f"whisper {cfg.model}"
         self._model: Any = None
 
     def load(self) -> None:
@@ -106,3 +134,59 @@ class Transcriber:
             initial_prompt=build_prompt(self.cfg.vocabulary, prompt),
         )
         return clean_segments(segments)
+
+
+class ParakeetTranscriber:
+    """Parakeet has a ~24 min context, but utterances longer than this are
+    split at pauses first to keep memory and latency flat (file mode)."""
+
+    MAX_CHUNK_SECS = 30.0
+
+    def __init__(self, cfg: AsrConfig, sample_rate: int = 16000):
+        self.cfg = cfg
+        self.sample_rate = sample_rate
+        self.name = cfg.parakeet_model
+        self._model: Any = None
+
+    def load(self) -> None:
+        if self._model is not None:
+            return
+        import onnx_asr
+
+        quantization = self.cfg.quantization or None
+        if quantization in ("none", "fp32"):
+            quantization = None
+        log.info("loading %s (%s)", self.cfg.parakeet_model, quantization or "fp32")
+        self._model = onnx_asr.load_model(self.cfg.parakeet_model, quantization=quantization)
+
+    def _chunks(self, audio: np.ndarray) -> list[np.ndarray]:
+        if len(audio) <= self.MAX_CHUNK_SECS * self.sample_rate:
+            return [audio]
+        from voice_assistant.vad import Segmenter
+
+        seg = Segmenter(VadConfig(max_utterance_secs=self.MAX_CHUNK_SECS), self.sample_rate)
+        return seg.feed(audio) + seg.flush()
+
+    def transcribe(self, audio: np.ndarray, prompt: str = "", vad_filter: bool = False) -> str:
+        """``prompt`` is accepted for interface compatibility; Parakeet ignores it."""
+        if len(audio) < self.sample_rate * MIN_AUDIO_SECS:
+            return ""
+        self.load()
+        parts = [
+            str(self._model.recognize(chunk, sample_rate=self.sample_rate)).strip()
+            for chunk in self._chunks(audio.astype(np.float32, copy=False))
+        ]
+        return " ".join(p for p in parts if p)
+
+
+def make_transcriber(config: Config) -> SpeechToText:
+    sr = config.audio.sample_rate
+    if config.asr.engine == "parakeet":
+        return ParakeetTranscriber(config.asr, sr)
+    if config.asr.engine == "whisper":
+        return WhisperTranscriber(config.whisper, sr)
+    raise ValueError(f"unknown engine {config.asr.engine!r} (choose from {', '.join(ENGINES)})")
+
+
+# Backwards-compatible name
+Transcriber = WhisperTranscriber

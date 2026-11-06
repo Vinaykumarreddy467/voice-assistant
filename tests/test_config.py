@@ -2,11 +2,18 @@ from pathlib import Path
 
 import pytest
 
+from voice_assistant import config as config_module
 from voice_assistant.config import Config, ConfigError, load_config
 
 
-def test_missing_file_gives_defaults(tmp_path):
-    assert load_config(tmp_path / "nope.toml") == Config()
+def test_missing_default_file_gives_defaults(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "DEFAULT_CONFIG_PATH", tmp_path / "nope.toml")
+    assert load_config() == Config()
+
+
+def test_missing_explicit_file_is_an_error(tmp_path):
+    with pytest.raises(ConfigError, match="not found"):
+        load_config(tmp_path / "nope.toml")
 
 
 def test_overrides_are_merged(tmp_path):

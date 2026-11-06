@@ -72,6 +72,6 @@ def test_dconf_list_roundtrip():
 
 
 def test_service_unit_points_at_voice():
-    unit = setup.SERVICE_TEMPLATE.format(voice="/home/u/.local/bin/voice")
-    assert "ExecStart=/home/u/.local/bin/voice daemon" in unit
+    unit = setup.SERVICE_TEMPLATE.format(exec_voice=setup.systemd_quote("/home/u/.local/bin/voice"))
+    assert 'ExecStart="/home/u/.local/bin/voice" daemon' in unit
     assert "WantedBy=graphical-session.target" in unit

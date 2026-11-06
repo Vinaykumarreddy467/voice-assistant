@@ -70,7 +70,10 @@ class PushToTalk:
                 for ev in events:
                     if ev.type != ecodes.EV_KEY or ev.code != self.code:
                         continue
-                    if ev.value == 1:
-                        self.on_press()
-                    elif ev.value == 0:
-                        self.on_release()
+                    callback = {1: self.on_press, 0: self.on_release}.get(ev.value)
+                    if callback is None:  # 2 = key auto-repeat
+                        continue
+                    try:
+                        callback()
+                    except Exception:  # keep watching the key whatever happens
+                        log.exception("push-to-talk handler failed")

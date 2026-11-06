@@ -37,12 +37,17 @@ def copy_to_clipboard(text: str) -> bool:
         return False
     for cmd in (["wl-copy"], ["xclip", "-selection", "clipboard"]):
         try:
-            if (
-                subprocess.run(
-                    cmd, input=text, text=True, capture_output=True, timeout=2
-                ).returncode
-                == 0
-            ):
+            # Output to DEVNULL, not a pipe: wl-copy forks a child that keeps
+            # serving the clipboard and would hold a pipe open until the timeout.
+            result = subprocess.run(
+                cmd,
+                input=text,
+                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            if result.returncode == 0:
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue

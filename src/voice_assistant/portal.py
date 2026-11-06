@@ -141,14 +141,17 @@ class PortalKeyboard:
         if not started.get("devices", 0) & DEVICE_KEYBOARD:
             raise PortalError("keyboard access was not granted")
         if started.get("restore_token"):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(started["restore_token"])
-            path.chmod(0o600)
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(started["restore_token"])
+            os.replace(tmp, path)
         log.info("remote-desktop portal session ready")
         return session
 
     # ── typing ──
-    def _keysym(self, keysym: int) -> None:
+    def _send_keysym(self, keysym: int) -> None:
         GLib = self._GLib
         for state in (1, 0):
             self._call(
@@ -156,6 +159,16 @@ class PortalKeyboard:
                 GLib.Variant("(oa{sv}iu)", (self._session, {}, keysym, state)),
             )
             time.sleep(self._delay)
+
+    def _keysym(self, keysym: int) -> None:
+        try:
+            self._send_keysym(keysym)
+        except self._GLib.Error as exc:
+            # The user may have ended the session from the shell's "remote
+            # control" indicator: reconnect once (the restore token avoids a prompt).
+            log.warning("portal session lost (%s); reconnecting", exc.message)
+            self._session = self._open_session()
+            self._send_keysym(keysym)
 
     def type(self, text: str) -> None:
         for char in text:
